@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aistudio.oggresource.ui.theme.OggResourceTheme
+import com.aistudio.oggresource.ui.theme.persistDarkTheme
+import com.aistudio.oggresource.ui.theme.readSavedDarkTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -56,7 +58,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            OggResourceTheme {
+            val context = LocalContext.current
+            var isDarkTheme by remember {
+                mutableStateOf(readSavedDarkTheme(context, default = true))
+            }
+
+            OggResourceTheme(darkTheme = isDarkTheme) {
                 val viewModel: MainViewModel = viewModel()
                 val sourceFileUri by viewModel.sourceFileUri.collectAsState()
                 val sourceFileName by viewModel.sourceFileName.collectAsState()
@@ -87,7 +94,6 @@ class MainActivity : ComponentActivity() {
                 val isLooping by viewModel.isLooping.collectAsState()
                 val recentStreams by viewModel.recentStreams.collectAsState()
 
-                val context = LocalContext.current
                 val snackbarHostState = remember { SnackbarHostState() }
 
                 LaunchedEffect(statusMessage) {
@@ -207,6 +213,19 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
+                                IconButton(
+                                    onClick = {
+                                        isDarkTheme = !isDarkTheme
+                                        persistDarkTheme(context, isDarkTheme)
+                                    },
+                                    modifier = Modifier.testTag("button_toggle_theme")
+                                ) {
+                                    Icon(
+                                        imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                        contentDescription = if (isDarkTheme) "Switch to logo theme" else "Switch to dark theme",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                                 IconButton(
                                     onClick = { showAboutDialog = true },
                                     modifier = Modifier.testTag("button_about_developer")
