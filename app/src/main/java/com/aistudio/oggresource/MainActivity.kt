@@ -2033,8 +2033,7 @@ private fun sendFeedbackToDeveloper(
     }
 }
 
-private fun openFeedbackMailto(
-    context:parseFormSubmitSuccess(json: JSONObject?, httpOk: Boolean): Boolean {
+private fun parseFormSubmitSuccess(json: JSONObject?, httpOk: Boolean): Boolean {
     if (json == null) return httpOk
     return when (val raw = json.opt("success")) {
         is Boolean -> raw
@@ -2044,7 +2043,8 @@ private fun openFeedbackMailto(
     }
 }
 
-private fun  Context,
+private fun openFeedbackMailto(
+    context: Context,
     type: FeedbackType,
     subject: String,
     message: String,
