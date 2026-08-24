@@ -7,6 +7,71 @@ import kotlinx.coroutines.withContext
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
+data class StagedOggMeta(
+    val name: String,
+    val size: Long,
+    val codec: String,
+    val sampleRate: Int?,
+    val channels: Int?
+)
+
+suspend fun inspectReplacementOgg(context: Context, uri: Uri): StagedOggMeta = withContext(Dispatchers.IO) {
+    var name = "staged_file.ogg"
+    var size = 0L
+    var codec = "OGG"
+    var sampleRate: Int? = null
+    var channels: Int? = null
+
+    try {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (idx != -1) {
+                    cursor.getString(idx)?.let { name = it }
+                }
+            }
+        }
+    } catch (e: Exception) {
+        uri.lastPathSegment?.let { name = it }
+    }
+
+    try {
+        context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+            size = pfd.statSize
+            val inputStream = FileInputStream(pfd.fileDescriptor)
+            val headerBytes = ByteArray(1024)
+            val read = inputStream.read(headerBytes)
+            if (read >= 28 && headerBytes[0] == 79.toByte() && headerBytes[1] == 103.toByte() && headerBytes[2] == 103.toByte() && headerBytes[3] == 83.toByte()) {
+                val bytesStr = String(headerBytes, 0, read, Charsets.ISO_8859_1)
+                val vorbisIdx = bytesStr.indexOf("\u0001vorbis")
+                if (vorbisIdx != -1 && vorbisIdx + 15 < read) {
+                    codec = "Vorbis"
+                    channels = headerBytes[vorbisIdx + 7].toInt() and 0xFF
+                    sampleRate = (headerBytes[vorbisIdx + 8].toInt() and 0xFF) or
+                            ((headerBytes[vorbisIdx + 9].toInt() and 0xFF) shl 8) or
+                            ((headerBytes[vorbisIdx + 10].toInt() and 0xFF) shl 16) or
+                            ((headerBytes[vorbisIdx + 11].toInt() and 0xFF) shl 24)
+                } else {
+                    val opusIdx = bytesStr.indexOf("OpusHead")
+                    if (opusIdx != -1 && opusIdx + 16 < read) {
+                        codec = "Opus"
+                        channels = headerBytes[opusIdx + 9].toInt() and 0xFF
+                        sampleRate = (headerBytes[opusIdx + 12].toInt() and 0xFF) or
+                                ((headerBytes[opusIdx + 13].toInt() and 0xFF) shl 8) or
+                                ((headerBytes[opusIdx + 14].toInt() and 0xFF) shl 16) or
+                                ((headerBytes[opusIdx + 15].toInt() and 0xFF) shl 24)
+                    }
+                }
+            }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+
+    StagedOggMeta(name, size, codec, sampleRate, channels)
+}
 
 suspend fun getUriFileSize(context: Context, uri: Uri): Long {
     return withContext(Dispatchers.IO) {

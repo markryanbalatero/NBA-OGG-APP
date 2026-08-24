@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "NBA OGG Resource Tool"
+rootProject.name = "2K BEATS"
 include(":app")

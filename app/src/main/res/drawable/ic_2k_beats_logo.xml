@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+
+    <!-- Outer Circular White Badge -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M60,60 m-54,0 a54,54 0 1,0 108,0 a54,54 0 1,0 -108,0" />
+
+    <!-- Outer Bold Red Border Ring -->
+    <path
+        android:strokeColor="#E51924"
+        android:strokeWidth="4"
+        android:fillColor="#00000000"
+        android:pathData="M60,60 m-53,0 a53,53 0 1,0 106,0 a53,53 0 1,0 -106,0" />
+
+    <!-- Subtle Diagonal Speed Slash Accents (Bottom Left) -->
+    <path
+        android:fillColor="#E51924"
+        android:alpha="0.25"
+        android:pathData="M16,72 L55,107 L47,110 L12,78 Z" />
+    <path
+        android:fillColor="#E51924"
+        android:alpha="0.4"
+        android:pathData="M23,76 L66,112 L59,114 L18,82 Z" />
+
+    <!-- 2K TEXT (Top Section) -->
+    <!-- '2' -->
+    <path
+        android:fillColor="#E51924"
+        android:pathData="M27,33 C27,30.5 29,29 34,29 L54,29 C58,29 60,31 60,34 L60,37 C60,40.5 56,43 49,46 L37,50 L60,50 L60,55 L27,55 L27,51 C27,47 31,43.5 39,40.5 L47,37.5 C49,36.5 50,35.5 50,34.5 C50,33.5 49,33 46,33 L35,33 C32,33 31,34 31,35.5 L27,35 Z" />
+
+    <!-- Cutout notch in '2' -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M37,42 L50,42 L50,44 L37,44 Z" />
+
+    <!-- 'K' -->
+    <path
+        android:fillColor="#E51924"
+        android:pathData="M63,29 L73,29 L73,38 L88,29 L100,29 L83,41 L101,55 L88,55 L75,44 L73,46 L73,55 L63,55 Z" />
+
+    <!-- Horizontal Divider Line below 2K -->
+    <path
+        android:fillColor="#E51924"
+        android:pathData="M26,56.5 L101,56.5 L101,58 L26,58 Z" />
+
+    <!-- BEATS TEXT (Bottom Section) -->
+    <!-- 'B' -->
+    <path
+        android:fillColor="#E51924"
+        android:pathData="M25,60 L37,60 C41,60 43,62 43,65 C43,67 42,68.5 39.5,69.5 C42.5,70.5 44,72.5 44,76 C44,80 41,83 36.5,83 L25,83 Z M31,65 L31,69 L35.5,69 C37,69 38,68 38,66.5 C38,65.5 37,65 35.5,65 Z M31,73.5 L31,78 L36,78 C37.5,78 38.5,77 38.5,75.5 C38.5,74.2 37.5,73.5 36,73.5 Z" />
+
+    <!-- 'E' -->
+    <path
+        android:fillColor="#E51924"
+        android:pathData="M43.5,60 L57,60 L57,65 L49.5,65 L49.5,69 L56,69 L56,73.5 L49.5,73.5 L49.5,78 L57.5,78 L57.5,83 L43.5,83 Z" />
+
+    <!-- 'A' -->
+    <path
+        android:fillColor="#E51924"
+        android:pathData="M56.5,83 L63,60 L73,60 L79.5,83 L73,83 L71.5,77.5 L64.5,77.5 L63,83 Z M65.5,73 L70.5,73 L68,64 Z" />
+
+    <!-- 'T' -->
+    <path
+        android:fillColor="#E51924"
+        android:pathData="M78.5,60 L93.5,60 L93.5,65 L88.5,65 L88.5,83 L83,83 L83,65 L78.5,65 Z" />
+
+    <!-- 'S' -->
+    <path
+        android:fillColor="#E51924"
+        android:pathData="M92.5,78.5 C93.5,81.5 96,83 99,83 C103,83 105,80.5 105,77 C105,73.5 102,71.5 97.5,70 C94.5,69 93,67.5 93,65 C93,62 95.5,60 99,60 C102.5,60 104.5,61.8 105,64.5 L99.5,64.5 C99.2,63.8 98.5,63.2 97.8,63.2 C97,63.2 96.5,63.8 96.5,64.8 C96.5,65.8 97.5,66.8 99.8,67.8 C103.5,69.5 106,71.8 106,76 C106,80.8 102.5,83.5 98,83.5 C93.5,83.5 90.5,80.5 90,76.5 Z" />
+
+</vector>
