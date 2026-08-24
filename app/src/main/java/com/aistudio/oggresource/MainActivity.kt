@@ -20,8 +20,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
@@ -37,6 +40,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -444,33 +450,10 @@ class MainActivity : ComponentActivity() {
                                                 horizontalAlignment = Alignment.CenterHorizontally,
                                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
-                                                Surface(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(8.dp))
-                                                        .clickable { showBugReportDialog = true }
-                                                        .testTag("button_report_bug_list_footer"),
-                                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                                    shape = RoundedCornerShape(8.dp)
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Icon(
-                                                            Icons.Default.BugReport,
-                                                            contentDescription = null,
-                                                            tint = MaterialTheme.colorScheme.error,
-                                                            modifier = Modifier.size(14.dp)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(6.dp))
-                                                        Text(
-                                                            text = "Bug found? Report it to me",
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            fontWeight = FontWeight.Medium
-                                                        )
-                                                    }
-                                                }
+                                                FeedbackPromptChip(
+                                                    onClick = { showBugReportDialog = true },
+                                                    testTag = "button_report_bug_list_footer"
+                                                )
 
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
@@ -796,33 +779,10 @@ fun EmptyWelcomeState(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onOpenBugReport() }
-                    .testTag("button_report_bug_welcome"),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.BugReport,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Bug found? Report it to me",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
+            FeedbackPromptChip(
+                onClick = onOpenBugReport,
+                testTag = "button_report_bug_welcome"
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -957,11 +917,10 @@ fun AboutDeveloperDialog(
                     }
                 }
 
-                // Report Bug Action Card inside About dialog
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.25f)),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
@@ -975,27 +934,41 @@ fun AboutDeveloperDialog(
                         modifier = Modifier.padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.BugReport,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Feedback,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "Bug found? Report it to me",
+                                "Bug found or have a suggestion?",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                "Send feedback to mrkrynbltr.dev@gmail.com",
+                                "Send it to $DEVELOPER_EMAIL",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp
                             )
                         }
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
@@ -1011,277 +984,383 @@ fun AboutDeveloperDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BugReportDialog(
     onDismiss: () -> Unit
 ) {
+    var feedbackType by remember { mutableStateOf(FeedbackType.BUG) }
     var subject by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
+    var replyEmail by remember { mutableStateOf("") }
     var includeDeviceInfo by remember { mutableStateOf(true) }
     var isSending by remember { mutableStateOf(false) }
     var isSuccess by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var canEmailFallback by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val isBug = feedbackType == FeedbackType.BUG
 
-    AlertDialog(
+    fun openMailtoFallback() {
+        openFeedbackMailto(
+            context = context,
+            type = feedbackType,
+            subject = subject,
+            message = message,
+            replyEmail = replyEmail,
+            includeDeviceInfo = includeDeviceInfo
+        )
+    }
+
+    ModalBottomSheet(
         onDismissRequest = {
             if (!isSending) onDismiss()
         },
-        icon = {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isSuccess) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.errorContainer
-                    ),
-                contentAlignment = Alignment.Center
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(
-                    if (isSuccess) Icons.Default.CheckCircle else Icons.Default.BugReport,
-                    contentDescription = null,
-                    tint = if (isSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
-        },
-        title = {
-            Text(
-                if (isSuccess) "Report Sent Directly" else "Report a Bug",
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        text = {
-            if (isSuccess) {
-                Column(
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSuccess) MaterialTheme.colorScheme.primaryContainer
+                            else if (isBug) MaterialTheme.colorScheme.errorContainer
+                            else MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "Thank you for reporting! Your feedback has been sent directly to mrkrynbltr.dev@gmail.com.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icon(
+                        imageVector = when {
+                            isSuccess -> Icons.Default.CheckCircle
+                            isBug -> Icons.Default.BugReport
+                            else -> Icons.Default.Lightbulb
+                        },
+                        contentDescription = null,
+                        tint = when {
+                            isSuccess -> MaterialTheme.colorScheme.primary
+                            isBug -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.secondary
+                        },
+                        modifier = Modifier.size(26.dp)
                     )
                 }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Describe what happened below. When you tap Send, your report is submitted directly to the developer.",
+                        text = when {
+                            isSuccess -> "Sent to $DEVELOPER_EMAIL"
+                            isBug -> "Bug found or have a suggestion?"
+                            else -> "Share a suggestion"
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isSuccess) {
+                            "Thanks. Your note was delivered to the developer inbox."
+                        } else {
+                            "Choose a type, add details, and send. It goes to $DEVELOPER_EMAIL."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 17.sp
                     )
+                }
+            }
 
-                    if (errorMessage != null) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Error,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = errorMessage ?: "",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = subject,
-                        onValueChange = {
-                            subject = it
-                            errorMessage = null
-                        },
-                        label = { Text("Issue Title / Summary") },
-                        placeholder = { Text("e.g. Conversion failed on MP3 file") },
-                        singleLine = true,
-                        enabled = !isSending,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("input_bug_subject"),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    OutlinedTextField(
-                        value = message,
-                        onValueChange = {
-                            message = it
-                            errorMessage = null
-                        },
-                        label = { Text("Bug Description & Steps") },
-                        placeholder = { Text("Describe what happened and how to reproduce it...") },
-                        minLines = 3,
-                        maxLines = 5,
-                        enabled = !isSending,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("input_bug_message"),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(enabled = !isSending) { includeDeviceInfo = !includeDeviceInfo }
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            if (isSuccess) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Checkbox(
-                            checked = includeDeviceInfo,
-                            onCheckedChange = { if (!isSending) includeDeviceInfo = it },
-                            enabled = !isSending
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            "Include device and OS details",
+                            "Delivery confirmed",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "If you included a reply email, you can expect a response there.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("button_bug_done"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Done")
+                }
+                return@Column
+            }
 
-                    if (isSending) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                "Sending report directly...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FeedbackTypeChip(
+                    selected = isBug,
+                    enabled = !isSending,
+                    icon = Icons.Default.BugReport,
+                    label = "Bug found",
+                    modifier = Modifier.weight(1f),
+                    onClick = { feedbackType = FeedbackType.BUG }
+                )
+                FeedbackTypeChip(
+                    selected = !isBug,
+                    enabled = !isSending,
+                    icon = Icons.Default.Lightbulb,
+                    label = "Suggestion",
+                    modifier = Modifier.weight(1f),
+                    onClick = { feedbackType = FeedbackType.SUGGESTION }
+                )
+            }
+
+            if (errorMessage != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(
+                                Icons.Default.Error,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(16.dp)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = errorMessage ?: "",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        if (canEmailFallback) {
+                            OutlinedButton(
+                                onClick = { openMailtoFallback() },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Email instead")
+                            }
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            if (isSuccess) {
-                Button(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.testTag("button_bug_done")
-                ) {
-                    Text("Done")
+
+            OutlinedTextField(
+                value = subject,
+                onValueChange = {
+                    subject = it
+                    errorMessage = null
+                    canEmailFallback = false
+                },
+                label = { Text(if (isBug) "Bug summary" else "Suggestion title") },
+                placeholder = {
+                    Text(if (isBug) "e.g. Conversion failed on MP3 file" else "e.g. Add batch convert for a folder")
+                },
+                singleLine = true,
+                enabled = !isSending,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    imeAction = ImeAction.Next
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_bug_subject"),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            OutlinedTextField(
+                value = message,
+                onValueChange = {
+                    message = it
+                    errorMessage = null
+                    canEmailFallback = false
+                },
+                label = { Text(if (isBug) "What happened and how to reproduce it" else "Your idea and why it would help") },
+                placeholder = {
+                    Text(
+                        if (isBug) {
+                            "Describe the steps, what you expected, and what actually happened."
+                        } else {
+                            "Describe the improvement and where it would show up in the app."
+                        }
+                    )
+                },
+                minLines = 4,
+                maxLines = 8,
+                enabled = !isSending,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    imeAction = ImeAction.Next
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_bug_message"),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            OutlinedTextField(
+                value = replyEmail,
+                onValueChange = { replyEmail = it },
+                label = { Text("Reply email (optional)") },
+                placeholder = { Text("you@email.com") },
+                singleLine = true,
+                enabled = !isSending,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Done
+                ),
+                supportingText = {
+                    Text("Used only if a follow-up is needed. Leave blank to send anonymously.")
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(enabled = !isSending) { includeDeviceInfo = !includeDeviceInfo }
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = includeDeviceInfo,
+                    onCheckedChange = { if (!isSending) includeDeviceInfo = it },
+                    enabled = !isSending
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Column {
+                    Text(
+                        "Include device and OS details",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        "Helps reproduce bugs. Optional for suggestions.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-            } else {
+            }
+
+            if (isSending) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        "Sending to $DEVELOPER_EMAIL...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(
+                    onClick = onDismiss,
+                    enabled = !isSending,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Cancel")
+                }
                 Button(
                     onClick = {
-                        if (message.isBlank() && subject.isBlank()) {
-                            errorMessage = "Please enter a brief description before sending."
+                        if (subject.isBlank() && message.isBlank()) {
+                            errorMessage = "Add a short summary or details before sending."
+                            canEmailFallback = false
+                            return@Button
+                        }
+                        if (replyEmail.isNotBlank() && !replyEmail.contains("@")) {
+                            errorMessage = "Reply email looks incomplete. Fix it or leave it blank."
+                            canEmailFallback = false
                             return@Button
                         }
 
                         isSending = true
                         errorMessage = null
+                        canEmailFallback = false
 
                         scope.launch {
-                            val success = withContext(Dispatchers.IO) {
-                                try {
-                                    val payload = JSONObject().apply {
-                                        put("name", "2K BEATS User")
-                                        put("email", "noreply@aistudio.app")
-                                        put("_subject", if (subject.isNotBlank()) "Bug Report: $subject" else "Bug Report: 2K BEATS")
-                                        put("subject", subject.ifBlank { "2K BEATS Bug Report" })
-                                        put("message", message.ifBlank { "No detailed description provided." })
-                                        if (includeDeviceInfo) {
-                                            put("device_manufacturer", android.os.Build.MANUFACTURER)
-                                            put("device_model", android.os.Build.MODEL)
-                                            put("android_version", android.os.Build.VERSION.RELEASE)
-                                            put("sdk_int", android.os.Build.VERSION.SDK_INT)
-                                        }
-                                        put("_template", "table")
-                                        put("_captcha", "false")
-                                    }
-
-                                    val url = URL("https://formsubmit.co/ajax/mrkrynbltr.dev@gmail.com")
-                                    val conn = (url.openConnection() as HttpURLConnection).apply {
-                                        requestMethod = "POST"
-                                        setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                                        setRequestProperty("Accept", "application/json")
-                                        setRequestProperty("User-Agent", "2K-BEATS-Android")
-                                        doOutput = true
-                                        doInput = true
-                                        connectTimeout = 12000
-                                        readTimeout = 12000
-                                    }
-
-                                    val outputBytes = payload.toString().toByteArray(Charsets.UTF_8)
-                                    conn.outputStream.use { os ->
-                                        os.write(outputBytes)
-                                        os.flush()
-                                    }
-
-                                    val responseCode = conn.responseCode
-                                    conn.disconnect()
-                                    responseCode in 200..299
-                                } catch (e: Exception) {
-                                    false
-                                }
+                            val result = withContext(Dispatchers.IO) {
+                                sendFeedbackToDeveloper(
+                                    type = feedbackType,
+                                    subject = subject,
+                                    message = message,
+                                    replyEmail = replyEmail,
+                                    includeDeviceInfo = includeDeviceInfo
+                                )
                             }
-
                             isSending = false
-                            if (success) {
+                            if (result.success) {
                                 isSuccess = true
                             } else {
-                                errorMessage = "Failed to send directly. Check your network or try again."
+                                errorMessage = result.message
+                                canEmailFallback = true
                             }
                         }
                     },
                     enabled = !isSending,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.testTag("button_submit_bug_report")
+                    modifier = Modifier
+                        .weight(1.4f)
+                        .testTag("button_submit_bug_report"),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (isSending) "Sending..." else "Send Report")
-                }
-            }
-        },
-        dismissButton = {
-            if (!isSuccess) {
-                TextButton(
-                    onClick = onDismiss,
-                    enabled = !isSending,
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Cancel")
+                    Text(if (isSending) "Sending..." else if (isBug) "Send bug" else "Send idea")
                 }
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -1800,6 +1879,200 @@ fun StreamItemCard(
                 }
             }
         }
+    }
+}
+
+const val DEVELOPER_EMAIL = "mrkrynbltr.dev@gmail.com"
+const val FEEDBACK_FORM_URL = "https://formsubmit.co/ajax/mrkrynbltr.dev@gmail.com"
+const val APP_VERSION_LABEL = "1.0"
+
+enum class FeedbackType { BUG, SUGGESTION }
+
+data class FeedbackSubmitResult(
+    val success: Boolean,
+    val message: String
+)
+
+@Composable
+fun FeedbackPromptChip(
+    onClick: () -> Unit,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .testTag(testTag),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Feedback,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "Bug found or have a suggestion?",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun FeedbackTypeChip(
+    selected: Boolean,
+    enabled: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier,
+        label = { Text(label, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium) },
+        leadingIcon = {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+        },
+        shape = RoundedCornerShape(12.dp)
+    )
+}
+
+private fun sendFeedbackToDeveloper(
+    type: FeedbackType,
+    subject: String,
+    message: String,
+    replyEmail: String,
+    includeDeviceInfo: Boolean
+): FeedbackSubmitResult {
+    val typeLabel = if (type == FeedbackType.BUG) "Bug" else "Suggestion"
+    val summary = subject.ifBlank { "2K BEATS $typeLabel" }
+    val details = message.ifBlank { "No detailed description provided." }
+    val senderEmail = replyEmail.trim().ifBlank { DEVELOPER_EMAIL }
+
+    return try {
+        val payload = JSONObject().apply {
+            put("name", "2K BEATS User")
+            put("email", senderEmail)
+            put("_replyto", senderEmail)
+            put("_subject", "2K BEATS $typeLabel: $summary")
+            put("type", typeLabel)
+            put("subject", summary)
+            put("message", details)
+            put("app_version", APP_VERSION_LABEL)
+            if (includeDeviceInfo) {
+                put("device_manufacturer", android.os.Build.MANUFACTURER)
+                put("device_model", android.os.Build.MODEL)
+                put("android_version", android.os.Build.VERSION.RELEASE)
+                put("sdk_int", android.os.Build.VERSION.SDK_INT)
+            }
+            put("_template", "table")
+            put("_captcha", "false")
+        }
+
+        val url = URL(FEEDBACK_FORM_URL)
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("User-Agent", "2K-BEATS-Android")
+            doOutput = true
+            doInput = true
+            connectTimeout = 15000
+            readTimeout = 15000
+        }
+
+        conn.outputStream.use { os ->
+            os.write(payload.toString().toByteArray(Charsets.UTF_8))
+            os.flush()
+        }
+
+        val responseCode = conn.responseCode
+        val stream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+        val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+        conn.disconnect()
+
+        val json = runCatching { JSONObject(body) }.getOrNull()
+        val jsonSuccess = parseFormSubmitSuccess(json, responseCode in 200..299)
+        val jsonMessage = json?.optString("message").orEmpty()
+
+        when {
+            responseCode in 200..299 && jsonSuccess -> FeedbackSubmitResult(
+                success = true,
+                message = jsonMessage.ifBlank { "Sent to $DEVELOPER_EMAIL" }
+            )
+            jsonMessage.contains("activate", ignoreCase = true) ||
+                jsonMessage.contains("confirm", ignoreCase = true) -> FeedbackSubmitResult(
+                success = false,
+                message = "FormSubmit needs a one-time inbox confirmation for $DEVELOPER_EMAIL. Check that inbox, then tap Send again. You can also email instead."
+            )
+            else -> FeedbackSubmitResult(
+                success = false,
+                message = jsonMessage.ifBlank {
+                    "Could not confirm delivery (HTTP $responseCode). Use Email instead so it still reaches $DEVELOPER_EMAIL."
+                }
+            )
+        }
+    } catch (e: Exception) {
+        FeedbackSubmitResult(
+            success = false,
+            message = "Network send failed. Use Email instead so it still reaches $DEVELOPER_EMAIL."
+        )
+    }
+}
+
+private fun openFeedbackMailto(
+    context:parseFormSubmitSuccess(json: JSONObject?, httpOk: Boolean): Boolean {
+    if (json == null) return httpOk
+    return when (val raw = json.opt("success")) {
+        is Boolean -> raw
+        is Number -> raw.toInt() != 0
+        is String -> raw.equals("true", ignoreCase = true) || raw == "1"
+        else -> httpOk && !json.has("error")
+    }
+}
+
+private fun  Context,
+    type: FeedbackType,
+    subject: String,
+    message: String,
+    replyEmail: String,
+    includeDeviceInfo: Boolean
+) {
+    val typeLabel = if (type == FeedbackType.BUG) "Bug" else "Suggestion"
+    val summary = subject.ifBlank { "2K BEATS $typeLabel" }
+    val body = buildString {
+        appendLine(message.ifBlank { "No detailed description provided." })
+        appendLine()
+        if (replyEmail.isNotBlank()) {
+            appendLine("Reply-to: ${replyEmail.trim()}")
+        }
+        appendLine("App version: $APP_VERSION_LABEL")
+        if (includeDeviceInfo) {
+            appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            appendLine("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
+        }
+    }
+    val intent = Intent(Intent.ACTION_SENDTO).apply {
+        data = Uri.parse("mailto:")
+        putExtra(Intent.EXTRA_EMAIL, arrayOf(DEVELOPER_EMAIL))
+        putExtra(Intent.EXTRA_SUBJECT, "2K BEATS $typeLabel: $summary")
+        putExtra(Intent.EXTRA_TEXT, body)
+    }
+    runCatching {
+        context.startActivity(Intent.createChooser(intent, "Send to $DEVELOPER_EMAIL"))
     }
 }
 
