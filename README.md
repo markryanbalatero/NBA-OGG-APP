@@ -1,11 +1,16 @@
-<div align="center">
+# OGG Resource Tool (Android)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+This is a local, offline-first tool for Android that scans, inspects, extracts, and replaces embedded OGG audio streams inside OBB and IFF resource files. 
 
-  <h1>Built with AI Studio</h2>
+## Features
+- Scan large resource files (like .obb and .iff) for embedded `OggS` pages.
+- Read stream sizes, sample rates, channels, and codec types (Vorbis/Opus).
+- Audition streams securely using the internal media player via temporary caching.
+- Export selected OGG streams directly to your device storage.
+- Safely replace OGG streams with new audio by patching the resource file, ensuring that byte limits (slot sizes) are strictly respected.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
-
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+## Technical Details
+This application was ported from a web-based React tool to a native Android application using Kotlin and Jetpack Compose.
+- **Framework**: Android SDK 35, Jetpack Compose, Kotlin 2.0
+- **File Access**: Uses the Storage Access Framework (SAF) for broad compatibility.
+- **Resource Processing**: Implements zero-copy byte extraction and limits in-memory processing to stay safe within Android RAM thresholds.
