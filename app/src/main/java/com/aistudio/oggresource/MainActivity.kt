@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -80,24 +81,43 @@ class MainActivity : ComponentActivity() {
                 val selectedFilter by viewModel.selectedFilter.collectAsState()
                 val sortField by viewModel.sortField.collectAsState()
                 val sortOrder by viewModel.sortOrder.collectAsState()
+                val exactNumericMode by viewModel.exactNumericMode.collectAsState()
                 val isScanning by viewModel.isScanning.collectAsState()
                 val scanProgress by viewModel.scanProgress.collectAsState()
+                val scanDetail by viewModel.scanDetail.collectAsState()
                 val isReplacing by viewModel.isReplacing.collectAsState()
                 val replaceProgress by viewModel.replaceProgress.collectAsState()
+                val replaceDetail by viewModel.replaceDetail.collectAsState()
+                val archiveType by viewModel.archiveType.collectAsState()
+                val workspaceMode by viewModel.workspaceMode.collectAsState()
+                val containerStack by viewModel.containerStack.collectAsState()
+                val obbEntries by viewModel.obbEntries.collectAsState()
+                val visibleObbEntries by viewModel.visibleObbEntries.collectAsState()
+                val currentObbFolder by viewModel.currentObbFolder.collectAsState()
+                val obbSearchQuery by viewModel.obbSearchQuery.collectAsState()
+                val obbFilter by viewModel.obbFilter.collectAsState()
+                val obbSortField by viewModel.obbSortField.collectAsState()
+                val obbSortAscending by viewModel.obbSortAscending.collectAsState()
+                val obbSearchWholeArchive by viewModel.obbSearchWholeArchive.collectAsState()
+                val stagedObbReplacements by viewModel.stagedObbReplacements.collectAsState()
+                val obbExtensionStats by viewModel.obbExtensionStats.collectAsState()
+                val isObbSelectionMode by viewModel.isObbSelectionMode.collectAsState()
+                val selectedObbPaths by viewModel.selectedObbPaths.collectAsState()
+                val entryPreview by viewModel.entryPreview.collectAsState()
+                val patchEngineMode by viewModel.patchEngineMode.collectAsState()
                 val globalOperation by viewModel.globalOperation.collectAsState()
                 var isSourceHeaderExpanded by remember { mutableStateOf(false) }
                 var showVerificationSheet by remember { mutableStateOf(false) }
                 var showConverterSheet by remember { mutableStateOf(false) }
+                var showExportByTypeSheet by remember { mutableStateOf(false) }
                 var showAboutDialog by remember { mutableStateOf(false) }
                 var showBugReportDialog by remember { mutableStateOf(false) }
+                var showNestedBackConfirmDialog by remember { mutableStateOf(false) }
                 val statusMessage by viewModel.statusMessage.collectAsState()
 
                 // Audio Player states
                 val activeTrack by viewModel.activeTrack.collectAsState()
                 val isPlaying by viewModel.isPlaying.collectAsState()
-                val currentPositionMs by viewModel.currentPositionMs.collectAsState()
-                val durationMs by viewModel.durationMs.collectAsState()
-                val isLooping by viewModel.isLooping.collectAsState()
                 val recentStreams by viewModel.recentStreams.collectAsState()
 
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -109,11 +129,39 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Back navigation for OBB selection, OBB folders & nested containers
+                BackHandler(
+                    enabled = isObbSelectionMode ||
+                        (workspaceMode == ArchiveWorkspaceMode.OBB_CONTENTS && currentObbFolder.isNotEmpty()) ||
+                        containerStack.isNotEmpty()
+                ) {
+                    if (isObbSelectionMode) {
+                        viewModel.clearObbSelection()
+                        return@BackHandler
+                    }
+                    if (workspaceMode == ArchiveWorkspaceMode.OBB_CONTENTS && viewModel.navigateObbFolderUp()) {
+                        return@BackHandler
+                    }
+                    if (containerStack.isNotEmpty()) {
+                        if (viewModel.hasNestedPendingChanges()) {
+                            showNestedBackConfirmDialog = true
+                        } else {
+                            viewModel.popNestedContainer(context, commitChangesToParent = false)
+                        }
+                    }
+                }
+
                 // File Pickers
                 val sourceFilePicker = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument()
                 ) { uri: Uri? ->
                     uri?.let {
+                        try {
+                            context.contentResolver.takePersistableUriPermission(
+                                it,
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (ignored: Exception) {}
                         val name = getFileName(context, it) ?: "resource.obb"
                         viewModel.setSourceFile(context, it, name)
                     }
@@ -123,6 +171,12 @@ class MainActivity : ComponentActivity() {
                     contract = ActivityResultContracts.OpenDocument()
                 ) { uri: Uri? ->
                     uri?.let {
+                        try {
+                            context.contentResolver.takePersistableUriPermission(
+                                it,
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (ignored: Exception) {}
                         val name = getFileName(context, it) ?: "audio.ogg"
                         viewModel.playAudioFile(context, it, name)
                     }
@@ -134,6 +188,47 @@ class MainActivity : ComponentActivity() {
                     uri?.let {
                         viewModel.performReplacement(context, it)
                     }
+                }
+
+                // OBB entry extraction & replacement pickers
+                var obbEntryToExtract by remember { mutableStateOf<ObbEntry?>(null) }
+                val extractObbEntryPicker = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("*/*")
+                ) { uri: Uri? ->
+                    val target = obbEntryToExtract
+                    if (uri != null && target != null) {
+                        viewModel.extractObbEntry(context, target, uri)
+                    }
+                    obbEntryToExtract = null
+                }
+
+                var pendingBatchExport by remember { mutableStateOf<PendingObbBatchExport?>(null) }
+                val batchExportTreePicker = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocumentTree()
+                ) { treeUri: Uri? ->
+                    val pending = pendingBatchExport
+                    if (treeUri != null && pending != null) {
+                        viewModel.executePendingObbBatchExport(context, pending, treeUri)
+                    }
+                    pendingBatchExport = null
+                }
+
+                var obbEntryToReplace by remember { mutableStateOf<ObbEntry?>(null) }
+                val replaceObbEntryPicker = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.OpenDocument()
+                ) { uri: Uri? ->
+                    val target = obbEntryToReplace
+                    if (uri != null && target != null) {
+                        try {
+                            context.contentResolver.takePersistableUriPermission(
+                                uri,
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (ignored: Exception) {}
+                        val name = getFileName(context, uri) ?: target.name
+                        viewModel.stageObbEntryReplacement(context, target, uri, name)
+                    }
+                    obbEntryToReplace = null
                 }
 
                 // Stream being extracted single
@@ -157,18 +252,54 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Stream being replaced
+                // Stream being replaced & Duplicate Protection Prompt
                 var streamToReplace by remember { mutableStateOf<Stream?>(null) }
+                var pendingDuplicatePrompt by remember { mutableStateOf<DuplicateReplacementPrompt?>(null) }
+                val scope = rememberCoroutineScope()
+
                 val replaceFilePicker = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.OpenDocument()
                 ) { uri: Uri? ->
-                    if (uri != null && streamToReplace != null) {
-                        viewModel.setReplacement(context, streamToReplace!!.id, uri)
+                    val currentTarget = streamToReplace
+                    if (uri != null && currentTarget != null) {
+                        try {
+                            context.contentResolver.takePersistableUriPermission(
+                                uri,
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        } catch (ignored: Exception) {}
+                        val name = getFileName(context, uri) ?: "audio.ogg"
+                        scope.launch {
+                            val size = getUriFileSize(context, uri)
+                            val duplicates = viewModel.findDuplicateReplacements(
+                                targetStreamId = currentTarget.id,
+                                uri = uri,
+                                fileName = name,
+                                fileSize = size
+                            )
+                            if (duplicates.isNotEmpty()) {
+                                pendingDuplicatePrompt = DuplicateReplacementPrompt(
+                                    targetStream = currentTarget,
+                                    replacementUri = uri,
+                                    replacementName = name,
+                                    replacementSize = size,
+                                    conflictingStreams = duplicates
+                                )
+                            } else {
+                                viewModel.setReplacement(context, currentTarget.id, uri)
+                                streamToReplace = null
+                            }
+                        }
+                    } else {
+                        streamToReplace = null
                     }
-                    streamToReplace = null
                 }
 
-                val readyToPatchCount = streams.count { it.replacementUri != null && it.replacementSize <= it.stream.slotSize }
+                val isInsideNested = containerStack.isNotEmpty()
+                val validStreamSwapCount = streams.count {
+                    it.replacementUri != null && (it.replacementSize <= it.stream.slotSize || it.stream.slotSize <= 0L || archiveType == ArchiveContainerType.ZIP_EXPANSION_OBB)
+                }
+                val readyToPatchCount = validStreamSwapCount + stagedObbReplacements.size
 
                 // Dynamic bottom spacing calculation to prevent overlap
                 val fabBottomPadding = when {
@@ -183,10 +314,41 @@ class MainActivity : ComponentActivity() {
                     else -> 88.dp
                 }
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    snackbarHost = { SnackbarHost(snackbarHostState) },
-                    topBar = {
+                if (showConverterSheet) {
+                    AudioConverterScreen(
+                        onNavigateBack = { showConverterSheet = false },
+                        viewModel = viewModel,
+                        onStageConvertedAsReplacement = if (streamToReplace != null) {
+                            { uri: Uri, name: String, size: Long ->
+                                val currentTarget = streamToReplace!!
+                                val duplicates = viewModel.findDuplicateReplacements(
+                                    targetStreamId = currentTarget.id,
+                                    uri = uri,
+                                    fileName = name,
+                                    fileSize = size
+                                )
+                                if (duplicates.isNotEmpty()) {
+                                    pendingDuplicatePrompt = DuplicateReplacementPrompt(
+                                        targetStream = currentTarget,
+                                        replacementUri = uri,
+                                        replacementName = name,
+                                        replacementSize = size,
+                                        conflictingStreams = duplicates
+                                    )
+                                    showConverterSheet = false
+                                } else {
+                                    viewModel.setReplacement(context, currentTarget.id, uri)
+                                    streamToReplace = null
+                                    showConverterSheet = false
+                                }
+                            }
+                        } else null
+                    )
+                } else {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        snackbarHost = { SnackbarHost(snackbarHostState) },
+                        topBar = {
                         TopAppBar(
                             title = {
                                 Row(
@@ -281,10 +443,24 @@ class MainActivity : ComponentActivity() {
                         if (readyToPatchCount > 0 && !isReplacing) {
                             ExtendedFloatingActionButton(
                                 onClick = {
-                                    showVerificationSheet = true
+                                    if (isInsideNested) {
+                                        viewModel.popNestedContainer(context, commitChangesToParent = true)
+                                    } else {
+                                        showVerificationSheet = true
+                                    }
                                 },
-                                icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
-                                text = { Text("Verify & Save ($readyToPatchCount)") },
+                                icon = {
+                                    Icon(
+                                        if (isInsideNested) Icons.Default.DoneAll else Icons.Default.CheckCircle,
+                                        contentDescription = null
+                                    )
+                                },
+                                text = {
+                                    Text(
+                                        if (isInsideNested) "Apply to OBB ($readyToPatchCount)"
+                                        else "Verify & Save ($readyToPatchCount)"
+                                    )
+                                },
                                 modifier = Modifier
                                     .padding(bottom = fabBottomPadding)
                                     .testTag("fab_save_patched"),
@@ -299,24 +475,12 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxWidth()
                                 .navigationBarsPadding()
                         ) {
-                            GlobalProgressBar(
-                                operation = globalOperation,
+                            GlobalProgressBarContainer(
+                                viewModel = viewModel,
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            AudioPlayerBar(
-                                activeTrack = activeTrack,
-                                isPlaying = isPlaying,
-                                currentPositionMs = currentPositionMs,
-                                durationMs = durationMs,
-                                isLooping = isLooping,
-                                onTogglePlayPause = { viewModel.togglePlayPause() },
-                                onSeekTo = { viewModel.seekTo(it) },
-                                onRewind = { viewModel.rewind(5) },
-                                onForward = { viewModel.forward(5) },
-                                onToggleLoop = { viewModel.toggleLoop() },
-                                onClose = { viewModel.stopPlayback() },
-                                onNextTrack = { viewModel.playNextStream(context) },
-                                onPreviousTrack = { viewModel.playPreviousStream(context) },
+                            AudioPlayerBarContainer(
+                                viewModel = viewModel,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("audio_player_bar")
@@ -329,6 +493,9 @@ class MainActivity : ComponentActivity() {
                             .fillMaxSize()
                             .padding(innerPadding)
                     ) {
+                        // System Permissions & Access Banner (Legit app runtime permission flow)
+                        PermissionCheckBanner()
+
                         if (sourceFileUri == null) {
                             // Welcome / Empty State
                             EmptyWelcomeState(
@@ -338,14 +505,37 @@ class MainActivity : ComponentActivity() {
                                 onOpenBugReport = { showBugReportDialog = true }
                             )
                         } else {
-                            val isScannedAndReady = streams.isNotEmpty() && !isScanning && !isReplacing
+                            val isZipObbWithEntries = archiveType == ArchiveContainerType.ZIP_EXPANSION_OBB && obbEntries.isNotEmpty()
+                            val isScannedAndReady = (streams.isNotEmpty() || isZipObbWithEntries) && !isScanning && !isReplacing
+
+                            if (containerStack.isNotEmpty()) {
+                                NestedContainerBanner(
+                                    containerStack = containerStack,
+                                    currentName = sourceFileName ?: "embedded.bin",
+                                    hasPendingChanges = readyToPatchCount > 0,
+                                    onBackWithoutSaving = {
+                                        if (readyToPatchCount > 0) {
+                                            showNestedBackConfirmDialog = true
+                                        } else {
+                                            viewModel.popNestedContainer(context, commitChangesToParent = false)
+                                        }
+                                    },
+                                    onCommitToParent = {
+                                        viewModel.popNestedContainer(context, commitChangesToParent = true)
+                                    }
+                                )
+                            }
 
                             if (isScannedAndReady && !isSourceHeaderExpanded) {
-                                // Sleek compact bar when scanned to maximize space for streams
+                                // Sleek compact bar when scanned to maximize space for contents
                                 CompactSourceFileBar(
                                     fileName = sourceFileName ?: "resource.obb",
                                     fileSize = sourceFileSize,
-                                    streamCount = streams.size,
+                                    streamCount = if (isZipObbWithEntries && workspaceMode == ArchiveWorkspaceMode.OBB_CONTENTS) {
+                                        obbEntries.count { !it.isDirectory }
+                                    } else streams.size,
+                                    itemUnitLabel = if (isZipObbWithEntries && workspaceMode == ArchiveWorkspaceMode.OBB_CONTENTS) "files" else "streams",
+                                    archiveType = archiveType,
                                     isExpanded = false,
                                     onToggleExpand = { isSourceHeaderExpanded = true },
                                     onChangeFile = { sourceFilePicker.launch(arrayOf("*/*")) }
@@ -355,22 +545,100 @@ class MainActivity : ComponentActivity() {
                                 SourceFileHeaderCard(
                                     fileName = sourceFileName ?: "resource.obb",
                                     fileSize = sourceFileSize,
-                                    streamCount = streams.size,
+                                    streamCount = if (isZipObbWithEntries && workspaceMode == ArchiveWorkspaceMode.OBB_CONTENTS) {
+                                        obbEntries.count { !it.isDirectory }
+                                    } else streams.size,
+                                    itemUnitLabel = if (isZipObbWithEntries && workspaceMode == ArchiveWorkspaceMode.OBB_CONTENTS) "files" else "streams",
+                                    archiveType = archiveType,
                                     isScanning = isScanning,
                                     scanProgress = scanProgress,
+                                    scanDetail = scanDetail,
                                     isReplacing = isReplacing,
                                     replaceProgress = replaceProgress,
+                                    replaceDetail = replaceDetail,
                                     onScanClick = { viewModel.scanSource(context) },
+                                    onInspectHeader = if (!isZipObbWithEntries) {
+                                        { viewModel.inspectCurrentRawHeader(context) }
+                                    } else null,
                                     onChangeFile = { sourceFilePicker.launch(arrayOf("*/*")) },
                                     onCollapse = if (isScannedAndReady) { { isSourceHeaderExpanded = false } } else null
                                 )
                             }
 
-                            if (streams.isNotEmpty()) {
+                            if (isZipObbWithEntries) {
+                                ObbWorkspaceModeBar(
+                                    workspaceMode = workspaceMode,
+                                    totalFilesCount = obbEntries.count { !it.isDirectory },
+                                    streamCount = streams.size,
+                                    onSelectMode = { viewModel.setWorkspaceMode(context, it) }
+                                )
+                            }
+
+                            if (isZipObbWithEntries && workspaceMode == ArchiveWorkspaceMode.OBB_CONTENTS) {
+                                ObbExplorerContent(
+                                    allEntries = obbEntries,
+                                    visibleEntries = visibleObbEntries,
+                                    extensionStats = obbExtensionStats,
+                                    currentFolder = currentObbFolder,
+                                    searchQuery = obbSearchQuery,
+                                    selectedFilter = obbFilter,
+                                    sortField = obbSortField,
+                                    sortAscending = obbSortAscending,
+                                    searchWholeArchive = obbSearchWholeArchive,
+                                    stagedReplacements = stagedObbReplacements,
+                                    isSelectionMode = isObbSelectionMode,
+                                    selectedPaths = selectedObbPaths,
+                                    activeTrack = activeTrack,
+                                    isPlaying = isPlaying,
+                                    listBottomPadding = listBottomPadding,
+                                    onNavigateFolder = { viewModel.navigateToObbFolder(it) },
+                                    onNavigateUp = { viewModel.navigateObbFolderUp() },
+                                    onSearchQueryChange = { viewModel.setObbSearchQuery(it) },
+                                    onSelectFilter = { viewModel.setObbFilter(it) },
+                                    onSelectSortField = { viewModel.setObbSortField(it) },
+                                    onToggleSortDirection = { viewModel.toggleObbSortDirection() },
+                                    onToggleSearchScope = { viewModel.toggleObbSearchWholeArchive() },
+                                    onResetFilters = { viewModel.resetObbFilters() },
+                                    onOpenEntry = { viewModel.openObbEntry(context, it) },
+                                    onInspectEntry = { viewModel.inspectObbEntry(context, it) },
+                                    onExtractEntry = { entry ->
+                                        obbEntryToExtract = entry
+                                        extractObbEntryPicker.launch(entry.name)
+                                    },
+                                    onExtractFolder = { folder ->
+                                        pendingBatchExport = PendingObbBatchExport.Folder(folderPrefix = folder, preserveFolders = true)
+                                        batchExportTreePicker.launch(null)
+                                    },
+                                    onReplaceEntry = { entry ->
+                                        obbEntryToReplace = entry
+                                        replaceObbEntryPicker.launch(arrayOf("*/*"))
+                                    },
+                                    onClearReplacement = { path -> viewModel.clearObbEntryReplacement(path) },
+                                    onPauseAudio = { viewModel.pausePlayback() },
+                                    onToggleSelectionMode = { viewModel.toggleObbSelectionMode() },
+                                    onToggleSelectEntry = { viewModel.toggleObbEntrySelection(it) },
+                                    onSelectAllVisible = { viewModel.selectAllVisibleObbEntries() },
+                                    onClearSelection = { viewModel.clearObbSelection() },
+                                    onOpenExportByType = { showExportByTypeSheet = true },
+                                    onExportSelected = { preserveFolders ->
+                                        pendingBatchExport = PendingObbBatchExport.Selected(
+                                            paths = selectedObbPaths,
+                                            preserveFolders = preserveFolders
+                                        )
+                                        batchExportTreePicker.launch(null)
+                                    },
+                                    onExportFiltered = { preserveFolders ->
+                                        pendingBatchExport = PendingObbBatchExport.FilteredVisible(preserveFolders = preserveFolders)
+                                        batchExportTreePicker.launch(null)
+                                    }
+                                )
+                            } else if (streams.isNotEmpty()) {
                                 // Search bar & Metadata Filter Chips
                                 ResourceSearchBar(
                                     query = searchQuery,
                                     onQueryChange = { viewModel.setSearchQuery(it) },
+                                    exactNumericMode = exactNumericMode,
+                                    onToggleExactNumericMode = { viewModel.toggleExactNumericMode() },
                                     selectedCategory = selectedFilter,
                                     onSelectCategory = { viewModel.setFilterCategory(it) },
                                     sortField = sortField,
@@ -418,9 +686,11 @@ class MainActivity : ComponentActivity() {
                                             val isOriginalPlaying = isOriginalActive && isPlaying
                                             val isStagedActive = activeTrack?.streamId == "staged_${streamState.stream.id}"
                                             val isStagedPlaying = isStagedActive && isPlaying
+                                            val duplicateMatches = viewModel.getDuplicatesForStream(streamState.stream.id)
 
                                             StreamItemCard(
                                                 streamState = streamState,
+                                                duplicateMatches = duplicateMatches,
                                                 isOriginalPlaying = isOriginalPlaying,
                                                 isOriginalActive = isOriginalActive,
                                                 isStagedPlaying = isStagedPlaying,
@@ -429,15 +699,15 @@ class MainActivity : ComponentActivity() {
                                                 onPlayStaged = { viewModel.playReplacementStream(context, streamState) },
                                                 onPause = { viewModel.pausePlayback() },
                                                 onExtract = {
-                                                    streamToExtract = streamState.stream
-                                                    extractSinglePicker.launch(streamState.stream.fileName)
+                                                     streamToExtract = streamState.stream
+                                                     extractSinglePicker.launch(streamState.stream.fileName)
                                                 },
                                                 onReplace = {
-                                                    streamToReplace = streamState.stream
-                                                    replaceFilePicker.launch(arrayOf("audio/ogg", "application/ogg", "*/*"))
+                                                     streamToReplace = streamState.stream
+                                                     replaceFilePicker.launch(arrayOf("audio/ogg", "application/ogg", "*/*"))
                                                 },
                                                 onClearReplacement = {
-                                                    viewModel.setReplacement(context, streamState.stream.id, null)
+                                                     viewModel.setReplacement(context, streamState.stream.id, null)
                                                 }
                                             )
                                         }
@@ -486,32 +756,98 @@ class MainActivity : ComponentActivity() {
                         PatchVerificationSheet(
                             sourceFileName = sourceFileName,
                             streams = streams,
+                            stagedObbReplacements = stagedObbReplacements,
+                            obbEntries = obbEntries,
                             activeTrack = activeTrack,
                             isPlaying = isPlaying,
+                            archiveType = archiveType,
+                            patchEngineMode = patchEngineMode,
+                            onSelectEngineMode = { viewModel.setPatchEngineMode(it) },
                             onPlayOriginal = { stream -> viewModel.playStream(context, stream) },
                             onPlayStaged = { state -> viewModel.playReplacementStream(context, state) },
                             onPause = { viewModel.pausePlayback() },
                             onRemoveReplacement = { streamId -> viewModel.setReplacement(context, streamId, null) },
+                            onRemoveObbReplacement = { path -> viewModel.clearObbEntryReplacement(path) },
                             onConfirmSave = {
-                                val base = sourceFileName?.replace(Regex("\\.(obb|iff)$", RegexOption.IGNORE_CASE), "") ?: "audio"
-                                val ext = if (sourceFileName?.endsWith(".iff", ignoreCase = true) == true) "iff" else "obb"
+                                val base = sourceFileName?.replace(Regex("\\.(obb|iff|zip)$", RegexOption.IGNORE_CASE), "") ?: "audio"
+                                val ext = when {
+                                    sourceFileName?.endsWith(".iff", ignoreCase = true) == true -> "iff"
+                                    sourceFileName?.endsWith(".zip", ignoreCase = true) == true -> "zip"
+                                    else -> "obb"
+                                }
                                 patchSavePicker.launch("$base.patched.$ext")
                             },
                             onDismiss = { showVerificationSheet = false }
                         )
                     }
 
-                    if (showConverterSheet) {
-                        AudioConverterSheet(
-                            isOpen = showConverterSheet,
-                            onDismiss = { showConverterSheet = false },
-                            viewModel = viewModel,
-                            onStageConvertedAsReplacement = if (streamToReplace != null) {
-                                { uri, _, _ ->
-                                    viewModel.setReplacement(context, streamToReplace!!.id, uri)
-                                    streamToReplace = null
+                    entryPreview?.let { preview ->
+                        ObbEntryPreviewSheet(
+                            preview = preview,
+                            onDismiss = { viewModel.dismissEntryPreview() },
+                            onOpenAsContainer = { entry -> viewModel.openEntryAsNestedContainer(context, entry) },
+                            onExtractEntry = { entry ->
+                                obbEntryToExtract = entry
+                                extractObbEntryPicker.launch(entry.name)
+                            },
+                            onReplaceEntry = { entry ->
+                                obbEntryToReplace = entry
+                                replaceObbEntryPicker.launch(arrayOf("*/*"))
+                            }
+                        )
+                    }
+
+                    if (showExportByTypeSheet) {
+                        ObbExportByTypeSheet(
+                            extensionStats = obbExtensionStats,
+                            resolveMatchingEntries = { exts, custom ->
+                                viewModel.resolveMatchingEntriesForExtensions(exts, custom)
+                            },
+                            onConfirmExport = { exts, custom, preserveFolders ->
+                                showExportByTypeSheet = false
+                                pendingBatchExport = PendingObbBatchExport.ByExtensions(
+                                    extensions = exts,
+                                    customFilter = custom,
+                                    preserveFolders = preserveFolders
+                                )
+                                batchExportTreePicker.launch(null)
+                            },
+                            onDismiss = { showExportByTypeSheet = false }
+                        )
+                    }
+
+                    if (showNestedBackConfirmDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showNestedBackConfirmDialog = false },
+                            title = { Text("Unsaved Nested Changes", fontWeight = FontWeight.Bold) },
+                            text = {
+                                Text("You modified audio inside ${sourceFileName ?: "this embedded file"}. Apply these changes back into the parent OBB before leaving?")
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showNestedBackConfirmDialog = false
+                                        viewModel.popNestedContainer(context, commitChangesToParent = true)
+                                    }
+                                ) {
+                                    Text("Apply to OBB")
                                 }
-                            } else null
+                            },
+                            dismissButton = {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(onClick = { showNestedBackConfirmDialog = false }) {
+                                        Text("Stay")
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            showNestedBackConfirmDialog = false
+                                            viewModel.popNestedContainer(context, commitChangesToParent = false)
+                                        }
+                                    ) {
+                                        Text("Discard", color = MaterialTheme.colorScheme.error)
+                                    }
+                                }
+                            }
                         )
                     }
 
@@ -527,6 +863,31 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { showBugReportDialog = false }
                         )
                     }
+
+                    if (pendingDuplicatePrompt != null) {
+                        val prompt = pendingDuplicatePrompt!!
+                        DuplicateAudioWarningDialog(
+                            prompt = prompt,
+                            onDismiss = {
+                                pendingDuplicatePrompt = null
+                                streamToReplace = null
+                            },
+                            onUseAnyway = {
+                                viewModel.setReplacement(context, prompt.targetStream.id, prompt.replacementUri)
+                                pendingDuplicatePrompt = null
+                                streamToReplace = null
+                            },
+                            onMoveToSlot = {
+                                prompt.conflictingStreams.forEach { conflict ->
+                                    viewModel.setReplacement(context, conflict.stream.id, null, autoPreview = false)
+                                }
+                                viewModel.setReplacement(context, prompt.targetStream.id, prompt.replacementUri, autoPreview = true)
+                                pendingDuplicatePrompt = null
+                                streamToReplace = null
+                            }
+                        )
+                    }
+                }
                 }
             }
         }
@@ -552,6 +913,28 @@ class MainActivity : ComponentActivity() {
             result = uri.path?.substringAfterLast('/')
         }
         return result
+    }
+
+    private fun getUriFileSize(context: Context, uri: Uri): Long {
+        if (uri.scheme == "content") {
+            try {
+                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        if (sizeIndex != -1 && !cursor.isNull(sizeIndex)) {
+                            return cursor.getLong(sizeIndex)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { it.available().toLong() } ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
     }
 }
 
@@ -606,7 +989,7 @@ fun EmptyWelcomeState(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        "Inspect, audition, extract, and replace embedded OGG audio streams inside .obb and .iff game archive files.",
+                        "Open whole .OBB archives, browse folders & inspect assets, or extract and replace embedded OGG audio inside .OBB and .IFF files.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -626,7 +1009,7 @@ fun EmptyWelcomeState(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                         ) {
                             Text(
-                                "OBB / IFF Patching",
+                                "OBB Explorer & Patching",
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
@@ -684,7 +1067,7 @@ fun EmptyWelcomeState(
                     ) {
                         Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Select .OBB or .IFF Archive", fontWeight = FontWeight.SemiBold)
+                        Text("Open .OBB, .ZIP, or .IFF Archive", fontWeight = FontWeight.SemiBold)
                     }
 
                     OutlinedButton(
@@ -1368,6 +1751,8 @@ fun CompactSourceFileBar(
     fileName: String,
     fileSize: Long,
     streamCount: Int,
+    itemUnitLabel: String = "streams",
+    archiveType: ArchiveContainerType = ArchiveContainerType.RAW_OGG_BANK,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onChangeFile: () -> Unit,
@@ -1411,7 +1796,7 @@ fun CompactSourceFileBar(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "${formatBytes(fileSize)} · $streamCount streams",
+                        text = "${formatBytes(fileSize)} · $streamCount $itemUnitLabel · ${archiveType.label}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1462,11 +1847,16 @@ fun SourceFileHeaderCard(
     fileName: String,
     fileSize: Long,
     streamCount: Int,
+    itemUnitLabel: String = "streams",
+    archiveType: ArchiveContainerType = ArchiveContainerType.RAW_OGG_BANK,
     isScanning: Boolean,
     scanProgress: Int,
+    scanDetail: String = "Scanning byte chunks...",
     isReplacing: Boolean,
     replaceProgress: Int,
+    replaceDetail: String = "Writing patched file...",
     onScanClick: () -> Unit,
+    onInspectHeader: (() -> Unit)? = null,
     onChangeFile: () -> Unit,
     onCollapse: (() -> Unit)? = null
 ) {
@@ -1503,7 +1893,7 @@ fun SourceFileHeaderCard(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            "${formatBytes(fileSize)} · ${if (streamCount > 0) "$streamCount streams detected" else "Ready to scan"}",
+                            "${formatBytes(fileSize)} · ${archiveType.label} · ${if (streamCount > 0) "$streamCount $itemUnitLabel" else "Ready to scan"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1547,6 +1937,21 @@ fun SourceFileHeaderCard(
                     Spacer(Modifier.width(8.dp))
                     Text("Scan File for OGG Streams")
                 }
+
+                if (onInspectHeader != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onInspectHeader,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("button_inspect_raw_header"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Inspect Raw Binary Header & Hex")
+                    }
+                }
             }
 
             if (isScanning) {
@@ -1560,9 +1965,11 @@ fun SourceFileHeaderCard(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "Scanning byte chunks... $scanProgress%",
+                    text = "$scanDetail ($scanProgress%)",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -1577,9 +1984,11 @@ fun SourceFileHeaderCard(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "Writing patched file... $replaceProgress%",
+                    text = "$replaceDetail ($replaceProgress%)",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -1589,6 +1998,7 @@ fun SourceFileHeaderCard(
 @Composable
 fun StreamItemCard(
     streamState: StreamState,
+    duplicateMatches: List<StreamState> = emptyList(),
     isOriginalPlaying: Boolean,
     isOriginalActive: Boolean,
     isStagedPlaying: Boolean,
@@ -1603,9 +2013,10 @@ fun StreamItemCard(
     val stream = streamState.stream
     val hasReplacement = streamState.replacementUri != null
     val isOversized = hasReplacement && streamState.replacementSize > stream.slotSize
+    val hasDuplicates = hasReplacement && duplicateMatches.isNotEmpty()
 
     val cardBorder = when {
-        isOversized -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(16.dp))
+        isOversized || hasDuplicates -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.error, RoundedCornerShape(16.dp))
         isStagedActive -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.tertiary, RoundedCornerShape(16.dp))
         isOriginalActive -> Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
         hasReplacement -> Modifier.border(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
@@ -1621,7 +2032,7 @@ fun StreamItemCard(
             containerColor = when {
                 isStagedActive -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.25f)
                 isOriginalActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-                hasReplacement && !isOversized -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.12f)
+                hasReplacement && !isOversized && !hasDuplicates -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.12f)
                 else -> MaterialTheme.colorScheme.surface
             }
         )
@@ -1638,6 +2049,18 @@ fun StreamItemCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                "#${stream.streamIndex}",
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         Text(
                             stream.fileName,
                             style = MaterialTheme.typography.titleMedium,
@@ -1663,7 +2086,7 @@ fun StreamItemCard(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        "Serial: 0x${stream.serial.toString(16).uppercase()} · ${stream.sampleRate ?: "Unknown"} Hz · ${if (stream.channels == 1) "Mono" else if (stream.channels == 2) "Stereo" else "${stream.channels ?: "?"} ch"}",
+                        "ID: #${stream.streamIndex} · Serial: 0x${stream.serial.toString(16).uppercase()} (${stream.serial}) · ${stream.sampleRate ?: "Unknown"} Hz · ${if (stream.channels == 1) "Mono" else if (stream.channels == 2) "Stereo" else "${stream.channels ?: "?"} ch"}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1699,13 +2122,13 @@ fun StreamItemCard(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = if (isOversized)
+                    color = if (isOversized || hasDuplicates)
                         MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
                     else
                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
                     border = androidx.compose.foundation.BorderStroke(
                         1.dp,
-                        if (isOversized) MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                        if (isOversized || hasDuplicates) MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
                         else MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f)
                     ),
                     modifier = Modifier
@@ -1724,9 +2147,9 @@ fun StreamItemCard(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    imageVector = if (isOversized) Icons.Default.Warning else Icons.Default.CheckCircle,
+                                    imageVector = if (isOversized || hasDuplicates) Icons.Default.Warning else Icons.Default.CheckCircle,
                                     contentDescription = null,
-                                    tint = if (isOversized) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+                                    tint = if (isOversized || hasDuplicates) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -1763,6 +2186,40 @@ fun StreamItemCard(
                                         color = MaterialTheme.colorScheme.tertiary,
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 10.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        if (hasDuplicates) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp)
+                                    .testTag("warning_duplicate_${stream.id}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = "Duplicate Song: Also used in ${duplicateMatches.joinToString { it.stream.fileName }}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -1880,6 +2337,178 @@ fun StreamItemCard(
             }
         }
     }
+}
+
+data class DuplicateReplacementPrompt(
+    val targetStream: Stream,
+    val replacementUri: Uri,
+    val replacementName: String,
+    val replacementSize: Long,
+    val conflictingStreams: List<StreamState>
+)
+
+@Composable
+fun DuplicateAudioWarningDialog(
+    prompt: DuplicateReplacementPrompt,
+    onDismiss: () -> Unit,
+    onUseAnyway: () -> Unit,
+    onMoveToSlot: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.errorContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = "Duplicate Audio Warning",
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        },
+        title = {
+            Text(
+                text = "Duplicate Song Detected",
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "The audio file \"${prompt.replacementName}\" is already inserted into another stream slot in this archive.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                // Currently assigned to
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Already used in:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        prompt.conflictingStreams.forEach { conflict ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.MusicNote,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "${conflict.stream.fileName} (Serial: 0x${conflict.stream.serial.toString(16).uppercase()})",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Target slot
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "Target Slot:",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "${prompt.targetStream.fileName} (Capacity: ${formatBytes(prompt.targetStream.slotSize)})",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Inserting duplicate songs will cause the exact same track to repeat in-game. To keep songs unique, choose \"Move to This Slot\" to unassign it from previous slot(s), or \"Cancel\" to pick a different audio file.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.5.sp,
+                    lineHeight = 16.sp
+                )
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Button(
+                    onClick = onMoveToSlot,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("button_duplicate_move_slot"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(Icons.Default.SwapCalls, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Move to This Slot (Keep Unique)", fontSize = 12.5.sp)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("button_duplicate_cancel"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    FilledTonalButton(
+                        onClick = onUseAnyway,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("button_duplicate_use_anyway"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Use Anyway", fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        dismissButton = null
+    )
 }
 
 const val DEVELOPER_EMAIL = "mrkrynbltr.dev@gmail.com"

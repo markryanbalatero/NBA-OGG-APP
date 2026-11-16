@@ -31,6 +31,38 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.random.Random
 
+import androidx.compose.ui.platform.LocalContext
+
+@Composable
+fun AudioPlayerBarContainer(
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier
+) {
+    val activeTrack by viewModel.activeTrack.collectAsState()
+    val isPlaying by viewModel.isPlaying.collectAsState()
+    val currentPositionMs by viewModel.currentPositionMs.collectAsState()
+    val durationMs by viewModel.durationMs.collectAsState()
+    val isLooping by viewModel.isLooping.collectAsState()
+    val context = LocalContext.current
+
+    AudioPlayerBar(
+        activeTrack = activeTrack,
+        isPlaying = isPlaying,
+        currentPositionMs = currentPositionMs,
+        durationMs = durationMs,
+        isLooping = isLooping,
+        onTogglePlayPause = { viewModel.togglePlayPause() },
+        onSeekTo = { viewModel.seekTo(it) },
+        onRewind = { viewModel.rewind(5) },
+        onForward = { viewModel.forward(5) },
+        onToggleLoop = { viewModel.toggleLoop() },
+        onClose = { viewModel.stopPlayback() },
+        onNextTrack = { viewModel.playNextStream(context) },
+        onPreviousTrack = { viewModel.playPreviousStream(context) },
+        modifier = modifier
+    )
+}
+
 @Composable
 fun AudioPlayerBar(
     activeTrack: ActiveAudioTrack?,

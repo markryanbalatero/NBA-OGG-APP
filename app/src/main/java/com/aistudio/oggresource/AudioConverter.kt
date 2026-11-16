@@ -186,12 +186,16 @@ object AudioConverter {
         inputUri: Uri,
         onProgress: (Int) -> Unit = {}
     ): DecodedPcm = withContext(Dispatchers.IO) {
-        val pfd = context.contentResolver.openFileDescriptor(inputUri, "r")
-            ?: throw IllegalArgumentException("Could not open input file")
-
+        val pfd = UriUtils.openReadPfd(context, inputUri)
         val extractor = MediaExtractor()
         try {
-            extractor.setDataSource(pfd.fileDescriptor)
+            if (inputUri.scheme == "file" && !inputUri.path.isNullOrEmpty() && File(inputUri.path!!).exists()) {
+                extractor.setDataSource(inputUri.path!!)
+            } else if (pfd != null) {
+                extractor.setDataSource(pfd.fileDescriptor)
+            } else {
+                throw IllegalArgumentException("Could not open input file")
+            }
             var audioTrackIndex = -1
             var format: MediaFormat? = null
 
@@ -297,7 +301,7 @@ object AudioConverter {
             )
         } finally {
             extractor.release()
-            pfd.close()
+            try { pfd?.close() } catch (ignored: Exception) {}
         }
     }
 

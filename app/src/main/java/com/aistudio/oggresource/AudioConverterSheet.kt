@@ -42,15 +42,12 @@ import java.io.FileInputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AudioConverterSheet(
-    isOpen: Boolean,
-    onDismiss: () -> Unit,
+fun AudioConverterScreen(
+    onNavigateBack: () -> Unit,
     viewModel: MainViewModel,
     onStageConvertedAsReplacement: ((Uri, String, Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    if (!isOpen) return
-
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -81,6 +78,12 @@ fun AudioConverterSheet(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (ignored: Exception) {}
             val name = getFileNameFromUri(context, uri) ?: "audio.mp3"
             val size = getFileSizeFromUri(context, uri)
             viewModel.setConverterInput(uri, name, size)
@@ -95,7 +98,7 @@ fun AudioConverterSheet(
         if (destUri != null && conversionResult != null) {
             coroutineScope.launch {
                 try {
-                    context.contentResolver.openOutputStream(destUri)?.use { out ->
+                    UriUtils.openOutputStream(context, destUri)?.use { out ->
                         FileInputStream(conversionResult!!.outputFile).use { input ->
                             input.copyTo(out)
                         }
@@ -107,64 +110,89 @@ fun AudioConverterSheet(
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        modifier = modifier.testTag("audio_converter_sheet"),
-        containerColor = MaterialTheme.colorScheme.surface,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp)
-        ) {
-            // Title Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+    Scaffold(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("audio_converter_screen"),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Transform,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Audio to OGG Converter",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "Transcode audio with calibrated tempo & pitch",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = onNavigateBack,
+                        modifier = Modifier.testTag("button_close_converter")
                     ) {
                         Icon(
-                            Icons.Default.Transform,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back to Archive View"
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "Audio to OGG Converter",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Transcode audio with calibrated tempo & pitch",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                },
+                actions = {
+                    if (inputUri != null) {
+                        IconButton(
+                            onClick = {
+                                viewModel.clearConverterResult()
+                                viewModel.setConverterInput(null, null, 0L)
+                            },
+                            modifier = Modifier.testTag("button_reset_converter")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Reset Converter",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                }
-
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.testTag("button_close_converter")
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = "Close converter")
-                }
-            }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
 
             // ----------------------------------------------------
             // TOP PROGRESS BAR & STATUS SECTION (Moved to top!)
@@ -283,10 +311,10 @@ fun AudioConverterSheet(
 
             LazyColumn(
                 modifier = Modifier
-                    .weight(1f, fill = false)
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .heightIn(max = 540.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .weight(1f)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 if (conversionResult != null) {
                     // ----------------------------------------------------
@@ -323,7 +351,7 @@ fun AudioConverterSheet(
                                         "${conversionResult!!.originalFileName.substringBeforeLast('.')}.ogg",
                                         conversionResult!!.convertedSize
                                     )
-                                    onDismiss()
+                                    onNavigateBack()
                                 }
                             } else null,
                             onConvertAnother = {
@@ -637,50 +665,76 @@ fun AudioConverterSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
             // Main Action Button (Convert Now) when not yet converted
             if (conversionResult == null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shadowElevation = 8.dp,
+                    color = MaterialTheme.colorScheme.surface
                 ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .testTag("button_cancel_converter"),
-                        shape = RoundedCornerShape(10.dp)
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Close")
-                    }
+                        OutlinedButton(
+                            onClick = onNavigateBack,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp)
+                                .testTag("button_cancel_converter"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Back")
+                        }
 
-                    Button(
-                        onClick = {
-                            viewModel.startAudioConversion(context)
-                        },
-                        enabled = inputUri != null && !isConverting,
-                        modifier = Modifier
-                            .weight(1.8f)
-                            .height(48.dp)
-                            .testTag("button_start_convert"),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Icon(Icons.Default.Transform, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isConverting) "Converting..." else "Convert to OGG")
+                        Button(
+                            onClick = {
+                                viewModel.startAudioConversion(context)
+                            },
+                            enabled = inputUri != null && !isConverting,
+                            modifier = Modifier
+                                .weight(2f)
+                                .height(50.dp)
+                                .testTag("button_start_convert"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(Icons.Default.Transform, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                if (isConverting) "Converting..." else "Convert to OGG",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+fun AudioConverterSheet(
+    isOpen: Boolean,
+    onDismiss: () -> Unit,
+    viewModel: MainViewModel,
+    onStageConvertedAsReplacement: ((Uri, String, Long) -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    if (!isOpen) return
+    AudioConverterScreen(
+        onNavigateBack = onDismiss,
+        viewModel = viewModel,
+        onStageConvertedAsReplacement = onStageConvertedAsReplacement,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -1118,7 +1172,7 @@ private fun getFileSizeFromUri(context: Context, uri: Uri): Long {
     }
     if (size == 0L) {
         try {
-            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+            UriUtils.openReadPfd(context, uri)?.use { pfd ->
                 size = pfd.statSize
             }
         } catch (e: Exception) {

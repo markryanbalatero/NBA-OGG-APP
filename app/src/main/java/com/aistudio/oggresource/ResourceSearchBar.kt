@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.sp
 fun ResourceSearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
+    exactNumericMode: Boolean = true,
+    onToggleExactNumericMode: () -> Unit = {},
     selectedCategory: FilterCategory,
     onSelectCategory: (FilterCategory) -> Unit,
     sortField: SortField,
@@ -33,8 +35,21 @@ fun ResourceSearchBar(
     onBatchExtract: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val isFiltered = query.isNotBlank() || selectedCategory != FilterCategory.ALL || sortField != SortField.DEFAULT || sortOrder != SortOrder.ASCENDING
+    val isFiltered = query.isNotBlank() || selectedCategory != FilterCategory.ALL || sortField != SortField.DEFAULT || sortOrder != SortOrder.ASCENDING || !exactNumericMode
     var sortMenuExpanded by remember { mutableStateOf(false) }
+
+    // Detect if current query targets a specific numeric stream ID / serial
+    val detectedNumericTarget = remember(query) {
+        val q = query.trim()
+        if (q.isEmpty()) null
+        else {
+            val idMatch = Regex("""^(?:#|id[:\s_-]*|s[:\s_-]*|stream[:\s_-]*|track[:\s_-]*|ogg[:\s_-]*|song[:\s_-]*|no[:.\s_-]*)(\d+)$""", RegexOption.IGNORE_CASE).find(q)
+            if (idMatch != null) idMatch.groupValues[1]
+            else if (q.all { it.isDigit() }) q
+            else if (q.startsWith("0x", ignoreCase = true) && q.length > 2) q
+            else null
+        }
+    }
 
     Column(
         modifier = modifier
@@ -50,7 +65,7 @@ fun ResourceSearchBar(
                 .testTag("input_search_streams"),
             placeholder = {
                 Text(
-                    "Search by filename, codec, kHz, stereo/mono, serial...",
+                    "Search exact number (e.g. 1400, #42, 0x1A), name, codec...",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     maxLines = 1
@@ -82,6 +97,63 @@ fun ResourceSearchBar(
                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
             )
         )
+
+        // Smart Numeric ID Search Indicator Banner
+        if (detectedNumericTarget != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = if (exactNumericMode) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = if (exactNumericMode) Icons.Default.FilterAlt else Icons.Default.Numbers,
+                            contentDescription = null,
+                            tint = if (exactNumericMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (exactNumericMode) {
+                                "Exact ID: Target #$detectedNumericTarget only"
+                            } else {
+                                "Partial search: Matching substring '$detectedNumericTarget'"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (exactNumericMode) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    FilterChip(
+                        selected = exactNumericMode,
+                        onClick = onToggleExactNumericMode,
+                        label = {
+                            Text(
+                                if (exactNumericMode) "Exact ID: ON" else "Exact ID: OFF",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier
+                            .height(28.dp)
+                            .testTag("button_toggle_exact_numeric_mode")
+                    )
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 

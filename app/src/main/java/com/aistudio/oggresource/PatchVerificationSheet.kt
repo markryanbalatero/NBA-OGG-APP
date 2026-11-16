@@ -28,22 +28,39 @@ import androidx.compose.ui.unit.sp
 fun PatchVerificationSheet(
     sourceFileName: String?,
     streams: List<StreamState>,
+    stagedObbReplacements: Map<String, StagedObbReplacement> = emptyMap(),
+    obbEntries: List<ObbEntry> = emptyList(),
     activeTrack: ActiveAudioTrack?,
     isPlaying: Boolean,
+    archiveType: ArchiveContainerType = ArchiveContainerType.RAW_OGG_BANK,
+    patchEngineMode: PatchEngineMode = PatchEngineMode.PYTHON_DIRECT_INPLACE,
+    onSelectEngineMode: (PatchEngineMode) -> Unit = {},
     onPlayOriginal: (Stream) -> Unit,
     onPlayStaged: (StreamState) -> Unit,
     onPause: () -> Unit,
     onRemoveReplacement: (String) -> Unit,
+    onRemoveObbReplacement: (String) -> Unit = {},
     onConfirmSave: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val replacedStreams = streams.filter { it.replacementUri != null }
-    val validCount = replacedStreams.count { it.replacementSize <= it.stream.slotSize }
-    val oversizedCount = replacedStreams.count { it.replacementSize > it.stream.slotSize }
+    val isZip = archiveType == ArchiveContainerType.ZIP_EXPANSION_OBB || streams.any { it.stream.isZipEntry }
+    val replacedStreams = streams.filter { it.replacementUri != null && !stagedObbReplacements.containsKey(it.stream.zipEntryPath ?: "") }
+    val validStreamCount = replacedStreams.count { it.replacementSize <= it.stream.slotSize || it.stream.slotSize <= 0L || isZip }
+    val oversizedCount = if (isZip) 0 else replacedStreams.count { it.replacementSize > it.stream.slotSize && it.stream.slotSize > 0L }
+    val totalModifiedCount = validStreamCount + stagedObbReplacements.size
 
-    val totalOriginalSize = replacedStreams.sumOf { it.stream.size }
-    val totalReplacementSize = replacedStreams.sumOf { it.replacementSize }
+    // Detect duplicate song assignments across replaced streams
+    val duplicateMap = replacedStreams
+        .groupBy { (it.replacementName ?: it.replacementUri.toString()).lowercase() }
+        .filter { it.value.size > 1 }
+    val hasDuplicates = duplicateMap.isNotEmpty()
+
+    val obbEntryMap = remember(obbEntries) { obbEntries.associateBy { it.path } }
+    val totalOriginalSize = replacedStreams.sumOf { it.stream.size } +
+        stagedObbReplacements.keys.sumOf { obbEntryMap[it]?.uncompressedSize ?: 0L }
+    val totalReplacementSize = replacedStreams.sumOf { it.replacementSize } +
+        stagedObbReplacements.values.sumOf { it.replacementSize }
     val sizeDelta = totalReplacementSize - totalOriginalSize
 
     ModalBottomSheet(
@@ -74,7 +91,8 @@ fun PatchVerificationSheet(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Review all staged audio swaps before saving the patched archive",
+                        text = if (isZip) "Review modified files & CRC32 rebuild settings before saving OBB"
+                        else "Review staged audio replacements and verify zero byte offsets",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -85,6 +103,101 @@ fun PatchVerificationSheet(
                     modifier = Modifier.testTag("button_close_verification")
                 ) {
                     Icon(Icons.Default.Close, contentDescription = "Close verification")
+                }
+            }
+
+            if (isZip) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VerifiedUser,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "ZIP OBB Rebuilder: Preserves STORED / DEFLATED entry layout and updates CRC32 checksums automatically.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+            } else {
+                // Engine Mode Selection Box
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Engineering,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Patching Engine Mode",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = patchEngineMode == PatchEngineMode.PYTHON_DIRECT_INPLACE,
+                                onClick = { onSelectEngineMode(PatchEngineMode.PYTHON_DIRECT_INPLACE) },
+                                label = { Text("Python Direct In-Place", fontSize = 11.5.sp) },
+                                leadingIcon = {
+                                    if (patchEngineMode == PatchEngineMode.PYTHON_DIRECT_INPLACE) {
+                                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = patchEngineMode == PatchEngineMode.OGG_SERIAL_SYNC,
+                                onClick = { onSelectEngineMode(PatchEngineMode.OGG_SERIAL_SYNC) },
+                                label = { Text("Auto Serial Sync", fontSize = 11.5.sp) },
+                                leadingIcon = {
+                                    if (patchEngineMode == PatchEngineMode.OGG_SERIAL_SYNC) {
+                                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = patchEngineMode.subtitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             }
 
@@ -124,7 +237,7 @@ fun PatchVerificationSheet(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "${replacedStreams.size} audio file(s) modified",
+                                text = "$totalModifiedCount archive item(s) modified",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -154,7 +267,47 @@ fun PatchVerificationSheet(
                 }
             }
 
-            // List of modified streams
+            // Duplicate warning banner if any songs are double-inserted
+            if (hasDuplicates) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Duplicate Songs Detected",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "${duplicateMap.values.sumOf { it.size }} slots share identical replacement songs.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+
+            // List of modified items (OBB entries + streams)
             LazyColumn(
                 modifier = Modifier
                     .weight(1f, fill = false)
@@ -162,9 +315,61 @@ fun PatchVerificationSheet(
                     .heightIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                items(stagedObbReplacements.values.toList(), key = { "obb_${it.entryPath}" }) { staged ->
+                    val origEntry = obbEntryMap[staged.entryPath]
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = staged.entryPath,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (staged.fromNestedContainer) {
+                                        "Nested Container Patched · ${formatBytes(origEntry?.uncompressedSize ?: 0L)} → ${formatBytes(staged.replacementSize)}"
+                                    } else {
+                                        "Replaced with ${staged.replacementName} · ${formatBytes(staged.replacementSize)}"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(
+                                onClick = { onRemoveObbReplacement(staged.entryPath) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    contentDescription = "Remove replacement",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 items(replacedStreams, key = { it.stream.id }) { streamState ->
+                    val dupKey = (streamState.replacementName ?: streamState.replacementUri.toString()).lowercase()
+                    val dupSlots = duplicateMap[dupKey]?.filter { it.stream.id != streamState.stream.id }?.map { it.stream.fileName } ?: emptyList()
+
                     VerificationItemCard(
                         streamState = streamState,
+                        duplicateSlots = dupSlots,
                         activeTrack = activeTrack,
                         isPlaying = isPlaying,
                         onPlayOriginal = { onPlayOriginal(streamState.stream) },
@@ -200,7 +405,7 @@ fun PatchVerificationSheet(
                         onDismiss()
                         onConfirmSave()
                     },
-                    enabled = validCount > 0,
+                    enabled = totalModifiedCount > 0,
                     modifier = Modifier
                         .weight(1.5f)
                         .height(48.dp)
@@ -213,7 +418,7 @@ fun PatchVerificationSheet(
                 ) {
                     Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Save Patched Archive ($validCount)")
+                    Text("Save Patched Archive ($totalModifiedCount)")
                 }
             }
         }
@@ -223,6 +428,7 @@ fun PatchVerificationSheet(
 @Composable
 fun VerificationItemCard(
     streamState: StreamState,
+    duplicateSlots: List<String> = emptyList(),
     activeTrack: ActiveAudioTrack?,
     isPlaying: Boolean,
     onPlayOriginal: () -> Unit,
@@ -232,7 +438,8 @@ fun VerificationItemCard(
     modifier: Modifier = Modifier
 ) {
     val stream = streamState.stream
-    val isOversized = streamState.replacementSize > stream.slotSize
+    val isOversized = if (stream.isZipEntry) false else streamState.replacementSize > stream.slotSize
+    val hasDuplicates = duplicateSlots.isNotEmpty()
     val isOrigActive = activeTrack?.streamId == stream.id
     val isOrigPlaying = isOrigActive && isPlaying
     val isStagedActive = activeTrack?.streamId == "staged_${stream.id}"
@@ -248,7 +455,7 @@ fun VerificationItemCard(
         ),
         border = BorderStroke(
             1.dp,
-            if (isOversized) MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+            if (isOversized || hasDuplicates) MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
         )
     ) {
@@ -261,14 +468,15 @@ fun VerificationItemCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = stream.fileName,
+                        text = stream.zipEntryPath ?: stream.fileName,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Serial: 0x${stream.serial.toString(16).uppercase()} · Slot: ${formatBytes(stream.slotSize)}",
+                        text = if (stream.isZipEntry) "ZIP Entry · Serial: 0x${stream.serial.toString(16).uppercase()}"
+                        else "Serial: 0x${stream.serial.toString(16).uppercase()} · Slot: ${formatBytes(stream.slotSize)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -286,6 +494,39 @@ fun VerificationItemCard(
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(18.dp)
                     )
+                }
+            }
+
+            if (hasDuplicates) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Duplicate: Also staged in ${duplicateSlots.joinToString()}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
